@@ -1,0 +1,11 @@
+.env
+.env.local
+.next/
+coverage/
+dist/
+node_modules/
+.pnpm-store*/
+packages/db/src/generated/prisma/
+playwright-report/
+test-results/
+*.tsbuildinfo

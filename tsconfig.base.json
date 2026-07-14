@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "allowJs": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "paths": {
+      "@memory-debugger/contracts": ["./packages/contracts/src/index.ts"],
+      "@memory-debugger/core": ["./packages/core/src/index.ts"],
+      "@memory-debugger/db": ["./packages/db/dist/src/index"],
+      "@memory-debugger/sdk": ["./packages/sdk/src/index.ts"],
+      "@memory-debugger/ui": ["./packages/ui/src/index.ts"]
+    }
+  }
+}

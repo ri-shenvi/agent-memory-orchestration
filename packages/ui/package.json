@@ -1,0 +1,13 @@
+{
+  "name": "@memory-debugger/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "build": "tsc --outDir dist --noEmit false",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": { "@types/react": "19.1.16" },
+  "peerDependencies": { "react": "^19.0.0" }
+}

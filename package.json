@@ -1,0 +1,39 @@
+{
+  "name": "agent-memory-orchestration",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "dev": "concurrently --kill-others --names web,worker --prefix-colors blue,magenta \"pnpm --filter @memory-debugger/web dev\" \"pnpm --filter @memory-debugger/worker dev\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint apps packages tests eslint.config.mjs playwright.config.ts vitest.config.ts vitest.integration.config.ts",
+    "postinstall": "pnpm db:generate && pnpm --filter @memory-debugger/db build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "pnpm --filter @memory-debugger/web build && playwright test",
+    "db:generate": "pnpm --filter @memory-debugger/db db:generate",
+    "db:migrate": "pnpm --filter @memory-debugger/db db:migrate",
+    "db:seed": "pnpm --filter @memory-debugger/db db:seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@next/eslint-plugin-next": "16.2.10",
+    "@playwright/test": "1.55.1",
+    "@types/node": "24.5.2",
+    "concurrently": "9.2.1",
+    "eslint": "9.39.2",
+    "eslint-config-next": "16.2.10",
+    "globals": "16.4.0",
+    "prettier": "3.6.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.44.1",
+    "vitest": "3.2.4"
+  }
+}

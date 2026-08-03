@@ -9,3 +9,4 @@ packages/db/src/generated/prisma/
 playwright-report/
 test-results/
 *.tsbuildinfo
+.worktrees/

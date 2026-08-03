@@ -30,6 +30,7 @@ export async function GET(): Promise<NextResponse> {
         lazyConnect: true,
         maxRetriesPerRequest: 1,
       });
+      redis.on("error", () => undefined);
 
       try {
         await redis.connect();

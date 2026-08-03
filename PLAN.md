@@ -92,11 +92,11 @@ Create a reproducible monorepo that starts locally with PostgreSQL/pgvector and 
 
 ### Acceptance criteria
 
-- [ ] `pnpm install` succeeds from a clean checkout.
-- [ ] `docker compose up -d` starts PostgreSQL/pgvector and Redis.
+- [x] `pnpm install` succeeds from a clean checkout.
+- [x] `docker compose up -d` starts PostgreSQL/pgvector and Redis.
 - [x] `pnpm db:generate` succeeds.
 - [x] `pnpm dev` starts the web app and worker.
-- [ ] The health endpoint reports healthy dependencies.
+- [x] The health endpoint reports healthy dependencies.
 - [x] `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` pass.
 
 ---

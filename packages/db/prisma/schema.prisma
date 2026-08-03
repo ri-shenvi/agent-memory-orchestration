@@ -6,3 +6,461 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum MemoryType {
+  CONVERSATION_SUMMARY
+  USER_PREFERENCE
+  ENTITY
+  FACT
+  TASK
+  DECISION
+  TOOL_RESULT
+}
+
+enum MemoryStatus {
+  ACTIVE
+  SUPERSEDED
+  CONTRADICTED
+  EXPIRED
+  DELETED
+}
+
+enum MessageRole {
+  SYSTEM
+  USER
+  ASSISTANT
+  TOOL
+}
+
+enum RunStatus {
+  QUEUED
+  RETRIEVING_MEMORY
+  GENERATING
+  EXECUTING_TOOLS
+  POST_PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ToolExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  BLOCKED
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+}
+
+enum EvaluationStatus {
+  PENDING
+  RUNNING
+  PASSED
+  FAILED
+  ERROR
+}
+
+model Workspace {
+  id          String       @id @default(cuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  appApiKeys  AppApiKey[]
+  credentials Credential[]
+  agents      Agent[]
+  agentUsers  AgentUser[]
+  demoOrders  DemoOrder[]
+
+  @@index([name], map: "workspace_name_idx")
+}
+
+model AppApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  keyHash     String
+  keyPrefix   String
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name], map: "app_api_key_workspace_name_key")
+  @@index([workspaceId], map: "app_api_key_workspace_idx")
+  @@index([keyPrefix], map: "app_api_key_prefix_idx")
+  @@index([expiresAt], map: "app_api_key_expiration_idx")
+}
+
+model Credential {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  name                 String
+  provider             String
+  encryptedValue       String
+  encryptionKeyVersion Int
+  lastFour             String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agents               Agent[]
+
+  @@unique([workspaceId, name], map: "credential_workspace_name_key")
+  @@index([workspaceId], map: "credential_workspace_idx")
+}
+
+model Agent {
+  id                   String           @id @default(cuid())
+  workspaceId          String
+  providerCredentialId String?
+  slug                 String
+  name                 String
+  systemPrompt         String
+  provider             String
+  protocol             String
+  model                String
+  baseUrl              String?
+  temperature          Float?
+  enabled              Boolean          @default(true)
+  memoryEnabled        Boolean          @default(true)
+  memoryConfig         Json
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  providerCredential   Credential?      @relation(fields: [providerCredentialId], references: [id], onDelete: SetNull)
+  conversations        Conversation[]
+  memories             Memory[]
+  runs                 AgentRun[]
+  tools                ToolDefinition[]
+  evaluationCases      EvaluationCase[]
+
+  @@unique([workspaceId, slug], map: "agent_workspace_slug_key")
+  @@index([workspaceId], map: "agent_workspace_idx")
+  @@index([providerCredentialId], map: "agent_credential_idx")
+}
+
+model AgentUser {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  externalUserId String
+  displayName    String?
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+  memories       Memory[]
+  runs           AgentRun[]
+
+  @@unique([workspaceId, externalUserId], map: "agent_user_workspace_external_id_key")
+  @@index([workspaceId], map: "agent_user_workspace_idx")
+}
+
+model Conversation {
+  id          String      @id @default(cuid())
+  agentId     String
+  agentUserId String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  agent       Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agentUser   AgentUser   @relation(fields: [agentUserId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  runs        AgentRun[]
+
+  @@index([agentId, agentUserId, updatedAt], map: "conversation_agent_user_updated_idx")
+  @@index([agentUserId], map: "conversation_agent_user_idx")
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  runId          String?
+  role           MessageRole
+  content        String
+  tokenCount     Int?
+  providerId     String?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  run            AgentRun?   @relation(fields: [runId], references: [id], onDelete: SetNull)
+  sourcedMemories Memory[]
+
+  @@index([conversationId, createdAt], map: "message_conversation_created_idx")
+  @@index([runId], map: "message_run_idx")
+}
+
+model Memory {
+  id                String          @id @default(cuid())
+  agentId           String
+  agentUserId       String
+  sourceMessageId   String?
+  memoryType        MemoryType
+  canonicalKey      String?
+  content           String
+  normalizedContent String?
+  metadata          Json?
+  embedding         Unsupported("vector(1536)")?
+  embeddingModel    String?
+  importanceScore   Float           @default(0.5)
+  confidenceScore   Float           @default(0.5)
+  status            MemoryStatus    @default(ACTIVE)
+  source            String
+  validFrom         DateTime?
+  validTo           DateTime?
+  expiresAt         DateTime?
+  lastAccessedAt    DateTime?
+  accessCount       Int             @default(0)
+  version           Int             @default(1)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  agent             Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agentUser         AgentUser       @relation(fields: [agentUserId], references: [id], onDelete: Cascade)
+  sourceMessage     Message?        @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  revisions         MemoryRevision[]
+  leftContradictions Contradiction[] @relation("ContradictionLeftMemory")
+  rightContradictions Contradiction[] @relation("ContradictionRightMemory")
+  runMemories       RunMemory[]
+
+  @@index([agentId, agentUserId, status], map: "memory_owner_status_idx")
+  @@index([agentUserId], map: "memory_agent_user_idx")
+  @@index([sourceMessageId], map: "memory_source_message_idx")
+  @@index([status, expiresAt], map: "memory_expiration_scan_idx")
+  @@index([agentId, agentUserId, importanceScore], map: "memory_importance_lookup_idx")
+}
+
+model MemoryRevision {
+  id                           String   @id @default(cuid())
+  memoryId                     String
+  version                      Int
+  previousContent              String
+  previousNormalizedContent    String?
+  previousMetadata             Json?
+  previousImportanceScore      Float
+  previousConfidenceScore      Float
+  changeReason                 String?
+  changedByRunId               String?
+  createdAt                    DateTime @default(now())
+  memory                       Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  changedByRun                 AgentRun? @relation(fields: [changedByRunId], references: [id], onDelete: SetNull)
+
+  @@unique([memoryId, version], map: "memory_revision_memory_version_key")
+  @@index([changedByRunId], map: "memory_revision_run_idx")
+}
+
+model Contradiction {
+  id               String    @id @default(cuid())
+  leftMemoryId     String
+  rightMemoryId    String
+  explanation      String
+  confidence       Float
+  resolution       String?
+  resolvedAt       DateTime?
+  resolvedByRunId  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  leftMemory       Memory    @relation("ContradictionLeftMemory", fields: [leftMemoryId], references: [id], onDelete: Cascade)
+  rightMemory      Memory    @relation("ContradictionRightMemory", fields: [rightMemoryId], references: [id], onDelete: Cascade)
+  resolvedByRun    AgentRun? @relation(fields: [resolvedByRunId], references: [id], onDelete: SetNull)
+
+  @@unique([leftMemoryId, rightMemoryId], map: "contradiction_memory_pair_key")
+  @@index([rightMemoryId], map: "contradiction_right_memory_idx")
+  @@index([resolvedByRunId], map: "contradiction_resolved_run_idx")
+}
+
+model AgentRun {
+  id                       String      @id @default(cuid())
+  agentId                  String
+  agentUserId              String
+  conversationId           String
+  replayedFromRunId        String?
+  requestId                String?
+  idempotencyKey           String?
+  pricingVersion           String?
+  status                   RunStatus   @default(QUEUED)
+  inputText                String
+  outputText               String?
+  contextBlock             String?
+  contextTokenCount        Int?
+  provider                 String
+  model                    String
+  effectiveConfig          Json
+  inputTokens              Int?
+  outputTokens             Int?
+  totalTokens              Int?
+  estimatedCostUsd         Decimal?    @db.Decimal(14, 8)
+  retrievalLatencyMs       Int?
+  modelLatencyMs           Int?
+  toolLatencyMs            Int?
+  postProcessingLatencyMs  Int?
+  totalLatencyMs           Int?
+  errorCode                String?
+  errorMessage             String?
+  startedAt                DateTime    @default(now())
+  completedAt              DateTime?
+  failedAt                 DateTime?
+  agent                    Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agentUser                AgentUser   @relation(fields: [agentUserId], references: [id], onDelete: Cascade)
+  conversation             Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  replayedFromRun          AgentRun?   @relation("RunReplay", fields: [replayedFromRunId], references: [id], onDelete: SetNull)
+  replayRuns               AgentRun[]  @relation("RunReplay")
+  messages                 Message[]
+  runMemories              RunMemory[]
+  events                   RunEvent[]
+  toolExecutions           ToolExecution[]
+  memoryRevisions          MemoryRevision[]
+  resolvedContradictions   Contradiction[]
+  evaluationRuns           EvaluationRun[]
+
+  @@unique([agentId, idempotencyKey], map: "agent_run_agent_idempotency_key")
+  @@index([agentId, startedAt], map: "agent_run_agent_started_idx")
+  @@index([agentUserId, startedAt], map: "agent_run_user_started_idx")
+  @@index([conversationId, startedAt], map: "agent_run_conversation_started_idx")
+  @@index([replayedFromRunId], map: "agent_run_replay_parent_idx")
+  @@index([requestId], map: "agent_run_request_idx")
+}
+
+model RunMemory {
+  id                  String   @id @default(cuid())
+  runId               String
+  memoryId            String
+  rank                 Int
+  semanticScore        Float
+  recencyScore         Float
+  importanceScore      Float
+  confidenceScore      Float
+  typeBoost            Float
+  finalScore           Float
+  selectionReason      String
+  includedInContext    Boolean  @default(false)
+  estimatedTokenCount  Int
+  run                  AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  memory               Memory   @relation(fields: [memoryId], references: [id], onDelete: Restrict)
+
+  @@unique([runId, memoryId], map: "run_memory_run_memory_key")
+  @@index([runId, rank], map: "run_memory_run_rank_idx")
+  @@index([memoryId], map: "run_memory_memory_idx")
+}
+
+model RunEvent {
+  id         String   @id @default(cuid())
+  runId      String
+  eventType  String
+  sequence   Int
+  durationMs Int?
+  payload    Json?
+  createdAt  DateTime @default(now())
+  run        AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sequence], map: "run_event_run_sequence_key")
+  @@index([runId, sequence], map: "run_event_run_sequence_idx")
+}
+
+model ToolDefinition {
+  id             String          @id @default(cuid())
+  agentId        String
+  name           String
+  description    String
+  method         HttpMethod
+  endpoint       String
+  headerTemplate Json?
+  authConfig     Json?
+  requestSchema  Json
+  responseSchema Json?
+  timeoutMs      Int             @default(10000)
+  enabled        Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  agent          Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  executions     ToolExecution[]
+
+  @@unique([agentId, name], map: "tool_definition_agent_name_key")
+  @@index([agentId], map: "tool_definition_agent_idx")
+}
+
+model ToolExecution {
+  id                String              @id @default(cuid())
+  runId             String
+  toolDefinitionId  String
+  status            ToolExecutionStatus @default(PENDING)
+  requestArguments  Json
+  sanitizedRequest  Json?
+  sanitizedResponse Json?
+  httpStatus        Int?
+  executionTimeMs   Int?
+  errorCode         String?
+  errorMessage      String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  run               AgentRun            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  toolDefinition    ToolDefinition       @relation(fields: [toolDefinitionId], references: [id], onDelete: Restrict)
+
+  @@index([runId], map: "tool_execution_run_idx")
+  @@index([toolDefinitionId], map: "tool_execution_definition_idx")
+}
+
+model EvaluationCase {
+  id                 String          @id @default(cuid())
+  agentId            String
+  name               String
+  description        String?
+  setupMessages      Json
+  triggerMessage     String
+  assertions         Json
+  effectiveConfig    Json?
+  expectedBehavior   Json
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  agent              Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  runs               EvaluationRun[]
+
+  @@unique([agentId, name], map: "evaluation_case_agent_name_key")
+  @@index([agentId], map: "evaluation_case_agent_idx")
+}
+
+model EvaluationRun {
+  id                String           @id @default(cuid())
+  evaluationCaseId  String
+  agentRunId        String?
+  status            EvaluationStatus @default(PENDING)
+  effectiveConfig   Json
+  expectedBehavior  Json
+  actualBehavior    Json?
+  assertionResults  Json?
+  inputTokens       Int?
+  outputTokens      Int?
+  totalTokens       Int?
+  estimatedCostUsd  Decimal?         @db.Decimal(14, 8)
+  latencyMs         Int?
+  startedAt         DateTime         @default(now())
+  completedAt       DateTime?
+  errorCode         String?
+  errorMessage      String?
+  evaluationCase    EvaluationCase   @relation(fields: [evaluationCaseId], references: [id], onDelete: Cascade)
+  agentRun          AgentRun?        @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+
+  @@index([evaluationCaseId, startedAt], map: "evaluation_run_case_started_idx")
+  @@index([agentRunId], map: "evaluation_run_agent_run_idx")
+}
+
+model DemoOrder {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  externalUserId      String
+  orderNumber         String
+  status              String
+  estimatedDeliveryAt DateTime
+  deliveryLocation    String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, orderNumber], map: "demo_order_workspace_order_number_key")
+  @@index([workspaceId, externalUserId], map: "demo_order_workspace_user_idx")
+}
